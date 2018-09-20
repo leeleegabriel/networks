@@ -3,38 +3,43 @@
 # COMP-4320
 # 9/20/18
 
+import sys
 import socket
 import random
 import datetime
 import ipaddress
+import struct
 
-def main():
-  UDP_ADDRESS = getIP()
-  UDP_PORT = getInput("Enter Server Port: ", 0, 65535)
+def main(UDP_ADDRESS, UDP_PORT):
+  checkSocket(UDP_ADDRESS, UDP_PORT)
 
   Opcode = getInput("Enter Opcode: ", 0, 6)
   Operand1 = getInput("Enter Operand1: ", -32768, 32767)
   if Opcode != 6:
     Operand2 = getInput("Enter Operand2: ", -32768, 32767)
 
-  Request_id = random.randint(0, 255)
+  Request_id = random.randint(-128, 127)
 
   if Opcode != 6:
     MESSAGE = getMessage(Request_id, Opcode, Operand1, Operand2)
   else:
     MESSAGE = getMessage(Request_id, Opcode, Operand1)
+  #sendMessage("".join(MESSAGE).encode(), UDP_ADDRESS, UDP_PORT)
+  sendMessage(MESSAGE, UDP_ADDRESS, UDP_PORT, Request_id)
 
-  printMessage(MESSAGE)
-  sendMessage("".join(MESSAGE).encode(), UDP_ADDRESS, UDP_PORT)
+def checkSocket(ADDRESS, PORT):
+  try:
+    ipaddress.ip_address(ADDRESS)
+  except ValueError:
+    print("Invalid IP")
+    print("USAGE: python3 udp_client.py [IP Address] [Port]")
+    sys.exit(0)
 
-def getIP():
-  while True:
-    UDP_ADDRESS = input("Enter Server IP: ")
-    try:
-      ipaddress.ip_address(UDP_ADDRESS)
-      return UDP_ADDRESS
-    except ValueError:
-      print("Invalid IP")
+  if PORT < 0 or PORT > 65535:
+    print("Invalid Port")
+    print("USAGE: python3 udp_client.py [IP Address] [Port]")
+    sys.exit(0)
+
 
 def getInput(output, lower_bound, upper_bound):
   while True:
@@ -46,42 +51,25 @@ def getInput(output, lower_bound, upper_bound):
       pass
     print("Invalid input")
 
-def getMessage(Request_id, Opcode, Operand1, Operand2=""):
-  Request_id = (Request_id).to_bytes(1, byteorder='big')
-  Opcode =  (Operand1).to_bytes(1, byteorder='big')
-  Operand1 =  (Operand1).to_bytes(2, byteorder='big')
-  if Opcode != 6:
-    Byte_count = (8).to_bytes(1, byteorder='big')
-    Number_of_Operands = (2).to_bytes(1, byteorder='big')
-    Operand2 = (Operand2).to_bytes(2, byteorder='big')
+def getMessage(Request_id, Opcode, Operand1, Operand2=0):
+  if Opcode == 6:
+    Number_of_Operands = 1
   else:
-    Byte_count = (6).to_bytes(1, byteorder='big')
-    Number_of_Operands = (1).to_bytes(1, byteorder='big')
+    Number_of_Operands = 2
 
-  MESSAGE = []
-  if Opcode != 6:
-    MESSAGE += (Byte_count).hex()
-    MESSAGE += (Request_id).hex()
-    MESSAGE += (Opcode).hex()
-    MESSAGE += (Number_of_Operands).hex()
-    MESSAGE += (Operand1).hex()
-    MESSAGE += (Operand2).hex()
-  else: 
-    MESSAGE += (Byte_count).hex()
-    MESSAGE += (Request_id).hex()
-    MESSAGE += (Opcode).hex()
-    MESSAGE += (Number_of_Operands).hex()
-    MESSAGE += (Operand1).hex()
+  MESSAGE = struct.pack('!bbbbhh', 8, int(Request_id), int(Opcode), Number_of_Operands, Operand1, Operand2)
+  for x in range(0, 8):
+    print(hex((MESSAGE[x])))
   return MESSAGE
 
-def printMessage(MESSAGE):
-  x = 0
-  print("Bytes:")
-  while x in range(0, len(MESSAGE)):
-    print("".join(MESSAGE[x:x+2]))
-    x += 2
+# def printMessage(Output):
+#   x = 0
+#   print("Bytes:")
+#   while x in range(0, len(Output)):
+#     print("".join(Output[x:x+2]))
+#     x += 2
 
-def sendMessage(MESSAGE, UDP_ADDRESS, UDP_PORT):  
+def sendMessage(MESSAGE, UDP_ADDRESS, UDP_PORT, Request_id):  
   client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
   client.settimeout(10)
   #client.bind(("127.0.0.1", UDP_PORT))
@@ -100,12 +88,16 @@ def sendMessage(MESSAGE, UDP_ADDRESS, UDP_PORT):
     print(data)
     print("Round trip time: %s" % (t1 - t2).microseconds)
   except socket.timeout as e:
-    print("Server timed out (10 seconds")
+    print("Server timed out (10 seconds)")
 
 if __name__ == "__main__":
   try:
     while True:
       print("Starting UDP Client")
-      main()
+      if len(sys.argv) == 3:
+        main(sys.argv[1], int(sys.argv[2]))
+      else:
+        print("invalid command line arguments")
+        break
   except KeyboardInterrupt as k:
     print("\nKeyboardInterrupt detected quitting..")
